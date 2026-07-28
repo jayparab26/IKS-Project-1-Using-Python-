@@ -1,6 +1,6 @@
 # IKS-Project-1-Using-Python-
 
-This Project is Extra, as original project is fully functional
+This Project is Extra and not properly functional, as original project is fully functional
 
 https://iksacoustics.netlify.app
 
