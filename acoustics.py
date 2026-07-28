@@ -1,66 +1,71 @@
 import streamlit as st
-import librosa
 import numpy as np
-import matplotlib.pyplot as plt
+from scipy.io import wavfile
+import librosa
 
 st.set_page_config(page_title="Acoustic Signal Analysis", layout="wide")
 
 st.title("Acoustic Signal Analysis & Harmonic Ratio Study")
 
-# Audio mapping
+# Audio file mapping
 SOUND_FILES = {
     'Temple Bell': 'Templebell.mp3',
     'Shankh (Conch)': 'shell.mp3',
     'Tanpura (Sa)': 'tanpura.mp3'
 }
 
-# Sidebar / Radio button selection
-selected_name = st.radio("Select Instrument / Audio Source:", list(SOUND_FILES.keys()))
+# 1. Select Instrument
+selected_name = st.selectbox("Select Instrument / Audio Source:", list(SOUND_FILES.keys()))
 file_path = SOUND_FILES[selected_name]
 
-# Play Audio player in browser
+# 2. Audio Player
 st.audio(file_path)
 
-# Process Signal using Librosa
+# 3. Fast Signal Processing Function
 @st.cache_data
-def analyze_signal(path):
-    data, sample_rate = librosa.load(path, sr=None)
-    fft_size = 2048
-    chunk = data[:fft_size]
-    fft_spectrum = np.abs(np.fft.rfft(chunk))
-    freqs = np.fft.rfftfreq(fft_size, 1 / sample_rate)
-    
-    peak_idx = np.argmax(fft_spectrum)
-    observed_f0 = freqs[peak_idx]
-    return data, fft_spectrum, freqs, observed_f0
+def load_audio_fast(path):
+    # Fast load audio data
+    data, sr = librosa.load(path, sr=22050)
+    return data, sr
 
 try:
-    data, fft_spectrum, freqs, observed_f0 = analyze_signal(file_path)
+    data, sr = load_audio_fast(file_path)
+    total_duration = len(data) / sr
 
-    # Plot Waveform and Spectrum
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 6))
-    fig.patch.set_facecolor('#0f111a')
-    
-    # Waveform
-    ax1.set_facecolor('#181c2b')
-    ax1.plot(data[:1000], color='#6366f1')
-    ax1.set_title("WAVEFORM ANALYSIS: Time-Domain Signal x(t)", color='white')
-    ax1.tick_params(colors='white')
-    
-    # Spectrum
-    ax2.set_facecolor('#181c2b')
-    ax2.bar(freqs[:70], fft_spectrum[:70], color='#10b981', width=freqs[1]-freqs[0])
-    ax2.set_title("FREQUENCY SPECTRUM: Fast Fourier Transform X(f)", color='white')
-    ax2.tick_params(colors='white')
-    
-    plt.tight_layout()
-    st.pyplot(fig)
+    # 4. Interactive Time Slider (To view dynamic waveform across time)
+    st.subheader("Signal Timeline Control")
+    start_time = st.slider("Analyze Audio at Timestamp (seconds):", 0.0, float(max(0.1, total_duration - 0.1)), 0.0, step=0.1)
 
-    # Display Metrics
+    # Extract 2048 samples at the selected timestamp
+    start_sample = int(start_time * sr)
+    chunk_size = 2048
+    chunk = data[start_sample : start_sample + chunk_size]
+
+    if len(chunk) < chunk_size:
+        chunk = np.pad(chunk, (0, chunk_size - len(chunk)))
+
+    # Compute FFT
+    fft_spectrum = np.abs(np.fft.rfft(chunk))
+    freqs = np.fft.rfftfreq(chunk_size, 1.0 / sr)
+
+    # Find peak frequency (Sa)
+    peak_idx = np.argmax(fft_spectrum)
+    observed_f0 = freqs[peak_idx]
+
+    # 5. Display Waveform Chart
+    st.subheader("WAVEFORM ANALYSIS: Time-Domain Signal x(t)")
+    st.line_chart(chunk[:1000], height=180)
+
+    # 6. Display Frequency Spectrum Chart
+    st.subheader("FREQUENCY SPECTRUM: Fast Fourier Transform X(f)")
+    st.bar_chart(fft_spectrum[:100], height=200)
+
+    # 7. Display Calculated Ratios
+    st.markdown("### Harmonic Ratio Calculations")
     col1, col2, col3 = st.columns(3)
     col1.metric("Observed Base Frequency (Sa)", f"{observed_f0:.1f} Hz")
     col2.metric("Calculated Pa Ratio (1.5x)", f"{(observed_f0 * 1.5):.1f} Hz")
     col3.metric("Calculated Taar Sa Ratio (2.0x)", f"{(observed_f0 * 2.0):.1f} Hz")
 
 except Exception as e:
-    st.error(f"Error loading audio file '{file_path}'. Please verify the file is pushed to GitHub. Details: {e}")
+    st.error(f"Error loading audio file '{file_path}'. Please ensure the file exists in your repository. Details: {e}")
